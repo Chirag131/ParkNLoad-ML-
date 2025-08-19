@@ -63,7 +63,7 @@ for warehouse in df['warehouse_name'].unique():
 
     # Forecast from the specified start date for the given period
     last_date = df_daily['ds'].max()
-    current_time = pd.to_datetime('2025-08-19 05:03:00')  # Updated to current time
+    current_time = pd.to_datetime('2025-08-19 16:07:00')  # Updated to current time (04:07 PM IST)
     start_forecast = max(last_date, current_time) if last_date else current_time
     if forecast_start_date < start_forecast:
         print(f"Warning: Forecast start date {forecast_start_date} is before last data point {start_forecast}. Using {forecast_start_date}.")
@@ -71,6 +71,12 @@ for warehouse in df['warehouse_name'].unique():
     future['ds'] = future['ds'] + (forecast_start_date - future['ds'].min())  # Shift to start date
     forecast = model.predict(future)
     forecast_df = forecast[['ds', 'yhat', 'trend', 'weekly', 'diwali']].tail(forecast_period_days)  # Only future dates
+
+    # Save forecast data as CSV for the warehouse
+    forecast_csv_path = os.path.join('Prototype', 'forecast_data', f'forecast_{warehouse.replace(" ", "_")}.csv')
+    os.makedirs(os.path.dirname(forecast_csv_path), exist_ok=True)
+    forecast_df.to_csv(forecast_csv_path, index=False)
+    print(f"Saved forecast data for {warehouse} to {forecast_csv_path}")
 
     # Average seasonal for comparison
     avg_weekly = forecast_df['weekly'].mean()
@@ -173,17 +179,22 @@ for warehouse, data in results.items():
 df_results = pd.DataFrame(flattened_results)
 df_results.to_csv(os.path.join('Prototype', 'forecast_structured.csv'), index=False)
 
-# Create summary CSV
+# Create and update summary CSV with stocks to order
 summary_data = []
 for warehouse, data in results.items():
+    under_threshold = data['under_threshold']
+    understock_info = data['understock_info']
+    stocks_to_order = sum(under_threshold - entry['forecasted_stock'] for entry in understock_info)
     summary_data.append({
         'warehouse_name': warehouse,
         'mean_stock': data['mean_stock'],
         'over_threshold': data['over_threshold'],
-        'under_threshold': data['under_threshold'],
+        'under_threshold': under_threshold,
         'overstock_count': len(data['overstock_info']),
-        'understock_count': len(data['understock_info'])
+        'understock_count': len(data['understock_info']),
+        'stocks to order': stocks_to_order
     })
+
 df_summary = pd.DataFrame(summary_data)
 df_summary.to_csv(os.path.join('Prototype', 'forecast_summary.csv'), index=False)
 

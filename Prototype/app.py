@@ -1,8 +1,8 @@
 from flask import Flask, render_template, send_file
 import pandas as pd
 import os
-import schedule
-import subprocess
+from datetime import datetime
+import pytz
 
 app = Flask(__name__)
 
@@ -16,11 +16,22 @@ def home():
         df = pd.read_csv(FORECAST_SUMMARY_PATH)
         # Convert DataFrame to HTML table
         table_html = df.to_html(classes='table table-striped', index=False)
-        return render_template('index.html', table=table_html)
+        # Get current timestamp in IST using timezone
+        ist = pytz.timezone('Asia/Kolkata')
+        timestamp = datetime.now(ist).strftime('%Y-%m-%d %I:%M %p IST')
+        return render_template('index.html', table=table_html, timestamp=timestamp)
     except FileNotFoundError:
-        return "Error: forecast_summary.csv not found. Please run the forecast script first.", 404
+        ist = pytz.timezone('Asia/Kolkata')
+        timestamp = datetime.now(ist).strftime('%Y-%m-%d %I:%M %p IST')
+        return render_template('index.html', table=None, timestamp=timestamp, error="Forecast summary file not found. Please run the forecast script first.")
+    except pd.errors.EmptyDataError:
+        ist = pytz.timezone('Asia/Kolkata')
+        timestamp = datetime.now(ist).strftime('%Y-%m-%d %I:%M %p IST')
+        return render_template('index.html', table=None, timestamp=timestamp, error="Forecast summary file is empty. Please ensure data is generated.")
     except Exception as e:
-        return f"Error loading forecast summary: {e}", 500
+        ist = pytz.timezone('Asia/Kolkata')
+        timestamp = datetime.now(ist).strftime('%Y-%m-%d %I:%M %p IST')
+        return render_template('index.html', table=None, timestamp=timestamp, error=f"Error loading forecast summary: {str(e)}"), 500
 
 @app.route('/download')
 def download_file():
@@ -37,13 +48,5 @@ def api_summary():
     except FileNotFoundError:
         return {"error": "forecast_summary.csv not found"}, 404
 
-
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)
-
-def run_forecast():
-    subprocess.run(['python', 'forecast_logic.py'])
-
-schedule.every().day.at("05:00").do(run_forecast)  # Run daily at 5 AM IST
-while True:
-    schedule.run_pending()
