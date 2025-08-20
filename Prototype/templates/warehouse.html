@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ warehouse_name }} Details</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { background-color: #f0f2f5; font-family: 'Segoe UI', 'Arial', sans-serif; color: #2c3e50; }
+        .header { background: #ffffff; color: #2c3e50; padding: 20px 0; text-align: center; border-bottom: 1px solid #e5e7eb; box-shadow: 0 2px 6px rgba(0,0,0,0.05); }
+        .container { margin-top: 30px; padding: 20px; background-color: white; border-radius: 12px; box-shadow: 0 6px 12px rgba(0,0,0,0.1); max-width: 1100px; }
+        .card-simple { border: 1px solid #e5e7eb; border-radius: 12px; padding: 16px; margin-bottom: 16px; box-shadow: 0 2px 6px rgba(0,0,0,0.04); }
+        .big-text { font-size: 22px; font-weight: 800; }
+        .sub { color: #6b7280; font-size: 13px; }
+        .pill { display: inline-block; padding: 8px 12px; border-radius: 999px; font-weight: 700; }
+        .pill-green { background: #d1fae5; color: #065f46; }
+        .pill-red { background: #fee2e2; color: #991b1b; }
+        .pill-yellow { background: #fef3c7; color: #92400e; }
+        img { width: 100%; border-radius: 12px; border: 1px solid #e5e7eb; }
+    </style>
+ </head>
+<body>
+    <div class="header">
+        <h2>{{ warehouse_name }}</h2>
+        <p>Updated: {{ timestamp }}</p>
+    </div>
+
+    <div class="container">
+        <div class="mb-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <a href="/" class="btn btn-outline-secondary">← Back</a>
+            <div class="d-flex gap-2">
+                <span class="badge bg-danger">Over {{ (summary.get('overstock_excess', 0) or 0) | int }}</span>
+                <span class="badge bg-warning text-dark">Under {{ (summary.get('stocks to order', 0) or 0) | int }}</span>
+            </div>
+        </div>
+
+        <div class="row g-3">
+            <div class="col-md-6">
+                <div class="card-simple">
+                    <div class="big-text">What to do</div>
+                    <div class="mt-2">
+                        {% if next_under and (not next_over or next_under.date <= next_over.date) %}
+                            <span class="pill pill-yellow">Order {{ next_under.short_by }} units</span>
+                            <div class="mt-2">By: {{ next_under.date }}</div>
+                            <div>Forecast stock: {{ next_under.forecasted | int }}</div>
+                        {% elif next_over %}
+                            <span class="pill pill-red">Reduce {{ next_over.excess_by }} units</span>
+                            <div class="mt-2">By: {{ next_over.date }}</div>
+                            <div>Forecast stock: {{ next_over.forecasted | int }}</div>
+                        {% elif first_perfect %}
+                            <span class="pill pill-green">Perfect</span>
+                            <div class="mt-2">On: {{ first_perfect.date }}</div>
+                            <div>Forecast stock: {{ first_perfect.forecasted_stock | int }}</div>
+                        {% else %}
+                            <span class="pill pill-green">No action needed</span>
+                        {% endif %}
+                        <div class="sub mt-2">Tip: Order a bit early to avoid rush. Reduce gradually to save cost.</div>
+                    </div>
+                </div>
+                <div class="card-simple">
+                    <div class="big-text">Limits</div>
+                    <div class="mt-2">Over limit: {{ thresholds.over | int }}</div>
+                    <div>Under limit: {{ thresholds.under | int }}</div>
+                    <div class="sub mt-2">Over limit means too much stock. Under limit means too little.</div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card-simple">
+                    <div class="big-text mb-2">Picture</div>
+                    <canvas id="forecastChart" height="260"></canvas>
+                    <div class="text-muted mt-2" style="font-size: 13px;">Blue line is future. Red/Green are limits. Try to stay between them.</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card-simple">
+            <div class="big-text">Summary</div>
+            <div class="mt-2 row">
+                <div class="col-md-3"><div class="sub">Status</div><div class="fw-bold">{{ summary.get('status', 'N/A') }}</div></div>
+                <div class="col-md-3"><div class="sub">Next action</div><div class="fw-bold">{{ summary.get('next_action', 'N/A') }}</div></div>
+                <div class="col-md-3"><div class="sub">Over total</div><div class="fw-bold">{{ (summary.get('overstock_excess', 0) or 0) | int }}</div></div>
+                <div class="col-md-3"><div class="sub">Under total</div><div class="fw-bold">{{ (summary.get('stocks to order', 0) or 0) | int }}</div></div>
+            </div>
+        </div>
+
+        <div class="row g-3">
+            <div class="col-md-6">
+                <div class="card-simple">
+                    <div class="big-text">Next Low Days</div>
+                    <ul class="mt-2 mb-0">
+                        {% for i in under_list %}
+                            <li>{{ i.date }} — need {{ (thresholds.under - i.forecasted_stock) | int }} units</li>
+                        {% else %}
+                            <li>None</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card-simple">
+                    <div class="big-text">Next High Days</div>
+                    <ul class="mt-2 mb-0">
+                        {% for i in over_list %}
+                            <li>{{ i.date }} — excess {{ (i.forecasted_stock - thresholds.over) | int }} units</li>
+                        {% else %}
+                            <li>None</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            </div>
+            <div class="col-md-12">
+                <div class="card-simple">
+                    <div class="big-text">Perfect Days (Just Right)</div>
+                    <ul class="mt-2 mb-0">
+                        {% for i in perfect_list %}
+                            <li>{{ i.date }} — around {{ i.forecasted_stock | int }} units</li>
+                        {% else %}
+                            <li>None</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <script>
+        const labels = {{ chart_labels | tojson }};
+        const values = {{ chart_values | tojson }};
+        const under = {{ thresholds.under | tojson }};
+        const over = {{ thresholds.over | tojson }};
+        const ctx = document.getElementById('forecastChart');
+        if (ctx && labels.length && values.length) {
+            new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        { label: 'Future', data: values, borderColor: '#1d4ed8', backgroundColor: 'rgba(29,78,216,0.15)', tension: 0.25, fill: true, pointRadius: 0, borderWidth: 3 }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: { display: true },
+                        tooltip: { enabled: true }
+                    },
+                    scales: {
+                        x: { ticks: { maxRotation: 0, autoSkip: true, maxTicksLimit: 6 } },
+                        y: { beginAtZero: true }
+                    }
+                },
+                plugins: [{
+                    id: 'limitsLines',
+                    afterDatasetsDraw(chart, args, pluginOptions) {
+                        const {ctx, chartArea: {top, bottom, left, right}, scales: {y}} = chart;
+                        ctx.save();
+                        const yUnder = y.getPixelForValue(under);
+                        const yOver = y.getPixelForValue(over);
+                        ctx.strokeStyle = '#16a34a'; ctx.setLineDash([6, 6]); ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(left, yUnder); ctx.lineTo(right, yUnder); ctx.stroke();
+                        ctx.strokeStyle = '#dc2626'; ctx.setLineDash([6, 6]); ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(left, yOver); ctx.lineTo(right, yOver); ctx.stroke();
+                        ctx.restore();
+                    }
+                }]
+            });
+        }
+    </script>
+</body>
+</html>
+

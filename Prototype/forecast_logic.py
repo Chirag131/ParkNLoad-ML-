@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 import os
 
 # Load and prepare data
-input_file = r'C:\Users\sghos\Desktop\Park\Prototype\inventory_data.csv'  # Absolute path
+input_file = 'inventory_data.csv'  # Absolute path
 try:
     df = pd.read_csv(input_file)
 except FileNotFoundError:
@@ -141,15 +141,22 @@ for warehouse in df['warehouse_name'].unique():
     plt.legend()
     plt.xticks(rotation=45)
     plt.tight_layout()
-    plot_dir = os.path.join('Prototype', 'static', 'plots')
-    os.makedirs(plot_dir, exist_ok=True)
-    plt.savefig(os.path.join(plot_dir, f'forecast_{warehouse.replace(" ", "_")}.png'))
+    # Save plots to both nested and top-level static paths for app compatibility
+    plot_dir_nested = os.path.join('Prototype', 'static', 'plots')
+    plot_dir_top = os.path.join('static', 'plots')
+    os.makedirs(plot_dir_nested, exist_ok=True)
+    os.makedirs(plot_dir_top, exist_ok=True)
+    filename = f'forecast_{warehouse.replace(" ", "_")}.png'
+    plt.savefig(os.path.join(plot_dir_nested, filename))
+    try:
+        plt.savefig(os.path.join(plot_dir_top, filename))
+    except Exception:
+        pass
     plt.close()
 
 # Save to JSON at specified absolute path with debug check
-json_path = r'C:\Users\sghos\Desktop\Park\Prototype\forecast_status.json'
-json_dir = os.path.dirname(json_path)
-os.makedirs(json_dir, exist_ok=True)
+json_path = 'forecast_status.json'
+
 try:
     with open(json_path, 'w') as f:
         json.dump(results, f, default=str)
@@ -179,19 +186,23 @@ for warehouse, data in results.items():
 df_results = pd.DataFrame(flattened_results)
 df_results.to_csv(os.path.join('Prototype', 'forecast_structured.csv'), index=False)
 
-# Create and update summary CSV with stocks to order
+# Create and update summary CSV with stocks to order and overstock excess
 summary_data = []
 for warehouse, data in results.items():
     under_threshold = data['under_threshold']
+    over_threshold = data['over_threshold']
     understock_info = data['understock_info']
+    overstock_info = data['overstock_info']
     stocks_to_order = sum(under_threshold - entry['forecasted_stock'] for entry in understock_info)
+    overstock_excess = sum(entry['forecasted_stock'] - over_threshold for entry in overstock_info)
     summary_data.append({
         'warehouse_name': warehouse,
         'mean_stock': data['mean_stock'],
-        'over_threshold': data['over_threshold'],
+        'over_threshold': over_threshold,
         'under_threshold': under_threshold,
-        'overstock_count': len(data['overstock_info']),
-        'understock_count': len(data['understock_info']),
+        'overstock_count': len(overstock_info),
+        'understock_count': len(understock_info),
+        'overstock_excess': overstock_excess,
         'stocks to order': stocks_to_order
     })
 

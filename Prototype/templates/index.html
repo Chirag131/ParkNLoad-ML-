@@ -15,12 +15,12 @@
             line-height: 1.6;
         }
         .header {
-            background: linear-gradient(90deg, #1a73e8, #0d47a1);
-            color: white;
+            background: #ffffff;
+            color: #2c3e50;
             padding: 30px 0;
             text-align: center;
-            border-bottom: 4px solid #0d47a1;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+            border-bottom: 1px solid #e5e7eb;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
         }
         .header h1 {
             margin: 0;
@@ -44,9 +44,19 @@
             margin-left: auto;
             margin-right: auto;
         }
+        .kpi-card { border: 1px solid #e5e7eb; border-radius: 12px; padding: 16px; text-align: center; box-shadow: 0 2px 6px rgba(0,0,0,0.04); }
+        .kpi-title { font-size: 13px; color: #6b7280; text-transform: uppercase; letter-spacing: .06em; }
+        .kpi-value { font-size: 26px; font-weight: 800; }
         .table-responsive {
             margin-top: 20px;
         }
+        .toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 14px; }
+        .legend { display: flex; gap: 8px; align-items: center; font-size: 12px; color: #6b7280; }
+        .legend .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+        .dot-over { background: #dc2626; }
+        .dot-under { background: #f59e0b; }
+        .dot-mixed { background: #06b6d4; }
+        .dot-ok { background: #16a34a; }
         table {
             width: 100%;
             border-collapse: collapse;
@@ -85,6 +95,7 @@
             transform: scale(1.05);
             transition: all 0.3s;
         }
+        .form-control, .form-select { max-width: 260px; }
         .refresh-btn {
             margin-left: 10px;
             background-color: #28a745;
@@ -114,6 +125,13 @@
             border-color: #ffeeba;
             color: #856404;
         }
+        .card-simple { border: 2px solid #e9ecef; border-radius: 12px; padding: 16px; }
+        .big-text { font-size: 20px; font-weight: 800; }
+        /* contextual row accents */
+        tbody tr.row-over td:first-child { border-left: 4px solid #dc2626; }
+        tbody tr.row-under td:first-child { border-left: 4px solid #f59e0b; }
+        tbody tr.row-mixed td:first-child { border-left: 4px solid #06b6d4; }
+        tbody tr.row-ok td:first-child { border-left: 4px solid #16a34a; }
         @media (max-width: 768px) {
             .header h1 {
                 font-size: 2em;
@@ -138,13 +156,102 @@
 
     <!-- Main Content -->
     <div class="container">
-        {% if table %}
-            <div class="table-responsive">
-                {{ table | safe }}
+        {% if rows %}
+            <div class="row g-3 mb-3">
+                <div class="col-6 col-md-3">
+                    <div class="kpi-card">
+                        <div class="kpi-title">Overstock</div>
+                        <div class="kpi-value text-danger">{{ dashboard_stats.over }}</div>
+                    </div>
+                </div>
+                <div class="col-6 col-md-3">
+                    <div class="kpi-card">
+                        <div class="kpi-title">Understock</div>
+                        <div class="kpi-value text-warning">{{ dashboard_stats.under }}</div>
+                    </div>
+                </div>
+                <div class="col-6 col-md-3">
+                    <div class="kpi-card">
+                        <div class="kpi-title">Mixed</div>
+                        <div class="kpi-value text-info">{{ dashboard_stats.mixed }}</div>
+                    </div>
+                </div>
+                <div class="col-6 col-md-3">
+                    <div class="kpi-card">
+                        <div class="kpi-title">On Target</div>
+                        <div class="kpi-value text-success">{{ dashboard_stats.ok }}</div>
+                    </div>
+                </div>
+                <div class="col-6 col-md-3">
+                    <div class="kpi-card">
+                        <div class="kpi-title">Total Excess</div>
+                        <div class="kpi-value">{{ dashboard_stats.total_excess }}</div>
+                    </div>
+                </div>
+                <div class="col-6 col-md-3">
+                    <div class="kpi-card">
+                        <div class="kpi-title">Total To Order</div>
+                        <div class="kpi-value">{{ dashboard_stats.total_order }}</div>
+                    </div>
+                </div>
             </div>
-            <div class="mt-4">
-                <a href="/download" class="btn btn-primary">Download Forecast Summary CSV</a>
-                <button id="refreshBtn" class="btn btn-success refresh-btn">Refresh Data</button>
+            <div class="toolbar">
+                <input id="searchInput" class="form-control" placeholder="Search warehouse..." />
+                <select id="statusFilter" class="form-select">
+                    <option value="all" selected>All statuses</option>
+                    <option value="over">Overstocking</option>
+                    <option value="under">Understocking</option>
+                    <option value="mixed">Mixed</option>
+                    <option value="ok">On target</option>
+                </select>
+                <div class="legend ms-auto">
+                    <span class="dot dot-over"></span> Over
+                    <span class="dot dot-under"></span> Under
+                    <span class="dot dot-mixed"></span> Mixed
+                    <span class="dot dot-ok"></span> OK
+                </div>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-striped align-middle">
+                    <thead>
+                        <tr>
+                            <th>Warehouse</th>
+                            <th>Status</th>
+                            <th>Action</th>
+                            <th>Over</th>
+                            <th>Under</th>
+                            <th>Mean</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for r in rows %}
+                        {% set slug = r['warehouse_name'].replace(' ', '_') %}
+                        {% set status_key = 'over' if 'Overstocking' in r['status'] else ('under' if 'Understocking' in r['status'] else ('mixed' if 'Mixed' in r['status'] else 'ok')) %}
+                        <tr class="row-{{ status_key }}" data-status="{{ status_key }}" data-name="{{ r['warehouse_name'] | lower }}" style="cursor:pointer" onclick="location.href='{{ url_for('warehouse_detail', warehouse_slug=slug) }}'">
+                            <td><span class="fw-bold">{{ r['warehouse_name'] }}</span></td>
+                            <td>
+                                {% if 'Overstocking' in r['status'] %}
+                                    <span class="badge bg-danger">{{ r['status'] }}</span>
+                                {% elif 'Understocking' in r['status'] %}
+                                    <span class="badge bg-warning text-dark">{{ r['status'] }}</span>
+                                {% elif 'Mixed' in r['status'] %}
+                                    <span class="badge bg-info text-dark">{{ r['status'] }}</span>
+                                {% else %}
+                                    <span class="badge bg-success">{{ r['status'] }}</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ r['next_action'] }}</td>
+                            <td>{{ (r.get('overstock_excess', 0) or 0) | int }}</td>
+                            <td>{{ (r.get('stocks to order', 0) or 0) | int }}</td>
+                            <td>{{ (r.get('mean_stock', 0) or 0) | int }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <div class="mt-4 d-flex gap-2">
+                <a href="/download" class="btn btn-primary">Download CSV</a>
+                <button id="refreshBtn" class="btn btn-success refresh-btn">Refresh</button>
             </div>
         {% else %}
             <div class="alert alert-warning" role="alert">
@@ -164,6 +271,24 @@
         document.getElementById('refreshBtn').addEventListener('click', function() {
             location.reload();
         });
+        const searchEl = document.getElementById('searchInput');
+        const filterEl = document.getElementById('statusFilter');
+        const rows = Array.from(document.querySelectorAll('tbody tr'));
+        function applyFilters() {
+            const q = (searchEl.value || '').toLowerCase().trim();
+            const f = filterEl.value;
+            rows.forEach(tr => {
+                const name = tr.getAttribute('data-name');
+                const status = tr.getAttribute('data-status');
+                const matchName = !q || (name && name.includes(q));
+                const matchStatus = (f === 'all') || status === f;
+                tr.style.display = (matchName && matchStatus) ? '' : 'none';
+            });
+        }
+        if (searchEl && filterEl) {
+            searchEl.addEventListener('input', applyFilters);
+            filterEl.addEventListener('change', applyFilters);
+        }
     </script>
 </body>
 </html>
